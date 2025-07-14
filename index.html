@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Fractal Generator</title>
+  <style>
+    :root {
+      --bg-light: #f4f4f4;
+      --bg-dark: #1e1e1e;
+      --text-light: #333;
+      --text-dark: #f4f4f4;
+      --accent: #00bcd4;
+    }
+
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      color: var(--text-light);
+      background: var(--bg-light);
+    }
+
+    header, footer {
+      background: var(--bg-dark);
+      color: var(--text-dark);
+      padding: 1rem;
+      text-align: center;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    #controls {
+      width: 300px;
+      padding: 1rem;
+      background: #fff;
+      overflow-y: auto;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+      box-sizing: border-box;
+    }
+
+    canvas {
+      flex: 1;
+      display: block;
+      background: black;
+    }
+
+    label {
+      display: block;
+      margin-top: 1rem;
+      font-weight: bold;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 0.4rem;
+      margin-top: 0.2rem;
+      box-sizing: border-box;
+      font-size: 1rem;
+    }
+
+    .description {
+      font-size: 0.85rem;
+      color: #666;
+      margin-top: 0.2rem;
+    }
+
+    button {
+      margin-top: 1.5rem;
+      padding: 0.6rem;
+      font-size: 1rem;
+      width: 100%;
+      background: var(--accent);
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    @media (max-width: 768px) {
+      main {
+        flex-direction: column;
+      }
+
+      #controls {
+        width: 100%;
+        box-shadow: none;
+        border-bottom: 1px solid #ddd;
+      }
+
+      canvas {
+        width: 100%;
+        height: calc(100vh - 500px); /* adjust if needed */
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Fractal Generator</h1>
+    <p>Visualize Mandelbrot and Julia sets</p>
+  </header>
+
+  <main>
+    <aside id="controls">
+      <label for="type">Fractal Type</label>
+      <select id="type">
+        <option value="mandelbrot">Mandelbrot</option>
+        <option value="julia">Julia</option>
+      </select>
+
+      <label for="cReal">Julia C (Real)</label>
+      <input type="number" id="cReal" value="-0.7" step="0.01"/>
+      
+      <label for="cImag">Julia C (Imag)</label>
+      <input type="number" id="cImag" value="0.27015" step="0.01"/>
+      <p class="description">Used only for Julia sets. Controls the shape of the fractal.</p>
+
+      <label for="iterations">Max Iterations</label>
+      <input type="number" id="iterations" value="100"/>
+
+      <label for="coloring">Coloring Algorithm</label>
+      <select id="coloring">
+        <option value="smooth">Smooth</option>
+        <option value="binary">Binary</option>
+        <option value="escape">Escape Time</option>
+        <option value="smooth">Smooth</option>
+        <option value="histogram">Histogram</option>
+        <option value="orbitTrap">Orbit Trap</option>
+        <option value="colorCycle">Color Cycle</option>
+        <option value="gradientMap">Gradient Map</option>        
+      </select>
+
+      <label for="palette">Color Scheme</label>
+      <select id="palette" name="palette">
+        <option value="classic">Classic</option>
+        <option value="fire">Fire</option>
+        <option value="fern">Fern</option>
+        <option value="retroPlasma">Retro Plasma</option>
+        <option value="sunset">Sunset</option>
+        <option value="oceanic">Oceanic</option>
+        <option value="ice">Ice</option>
+        <option value="neon">Neon</option>
+        <option value="pastel">Pastel</option>
+      </select>
+
+      <button onclick="renderFractal()">Render</button>
+      <button id="resetView">Reset View</button>
+      <button id="downloadImage">Download Image</button>
+    </aside>
+
+    <canvas id="fractalCanvas"></canvas>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 <a href="https://github.com/timtrottcodes/">https://github.com/timtrottcodes/</a> - Built with HTML5 Canvas & Vanilla JS</p>
+  </footer>
+
+  <script src="scripts.js"></script>
+</body>
+</html>
