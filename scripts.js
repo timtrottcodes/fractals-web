@@ -56,8 +56,8 @@ function getPaletteColor(palette, t) {
 
 function renderFractal() {
   const dpr = window.devicePixelRatio || 1;
-  const width = canvas.width / dpr;
-  const height = canvas.height / dpr;
+  const width = canvas.width;
+  const height = canvas.height;
 
   const type = document.getElementById("type").value;
   const cRe = parseFloat(document.getElementById("cReal").value);
@@ -75,7 +75,6 @@ function renderFractal() {
   // First pass: calculate iteration counts for all pixels and build histogram
   let iterationCounts = new Uint32Array(width * height);
   let histogram = new Uint32Array(maxIter + 1);
-  let total = 0;
 
   // For orbit trap (example: point trap at origin)
   function orbitTrap(zx, zy) {
@@ -172,6 +171,25 @@ function renderFractal() {
       let r, g, b;
 
       switch (coloring) {
+        case "binary":
+          // Simple binary: inside set = black, outside = white
+          if (i >= maxIter) {
+            r = g = b = 0; // inside the set
+          } else {
+            r = g = b = 255; // outside the set
+          }
+          break;
+
+        case "escape":
+          // Escape time: color based on iteration count (no smoothing)
+          if (i >= maxIter) {
+            r = g = b = 0;
+          } else {
+            let t = Math.floor(i) / maxIter;
+            [r, g, b] = getPaletteColor(palette, t);
+          }
+          break;
+
         case "smooth":
           if (i >= maxIter) {
             r = g = b = 0;
@@ -240,9 +258,8 @@ function renderFractal() {
 }
 
 function centerFractal() {
-  const dpr = window.devicePixelRatio || 1;
-  const width = canvas.width / dpr;
-  const height = canvas.height / dpr;
+  const width = canvas.width;
+  const height = canvas.height;
   const aspectRatio = width / height;
 
   // Set zoom level first
@@ -338,11 +355,12 @@ function zoomFractal(e) {
   const zoomFactor = isRightClick ? 0.5 : 2;
 
   const dpr = window.devicePixelRatio || 1;
-  const width = canvas.width / dpr;
-  const height = canvas.height / dpr;
+  const width = canvas.width;
+  const height = canvas.height;
 
-  const mouseX = e.offsetX;
-  const mouseY = e.offsetY;
+  // offsetX and offsetY need to be adjusted for DPR
+  const mouseX = e.offsetX * dpr;
+  const mouseY = e.offsetY * dpr;
 
   const aspectRatio = width / height;
   const scale = 1.5 / zoom;
@@ -376,6 +394,9 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault()); // Disable co
 canvas.addEventListener("mousedown", (e) => zoomFractal(e));
 
 document
+  .getElementById("renderButton")
+  .addEventListener("click", () => renderFractal());
+document
   .getElementById("resetView")
   .addEventListener("click", () => resetView());
 document
@@ -384,5 +405,5 @@ document
 
 window.addEventListener("resize", resizeCanvas);
 
-centerFractal()
+centerFractal();
 resizeCanvas();
