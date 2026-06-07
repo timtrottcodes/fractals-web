@@ -1,14 +1,15 @@
 let offsetX = 0;
 let offsetY = 0;
 let zoom = 1; // initial zoom level
+let animationFrameId = null; // Track animation for cancellation
+
+function getControlsWidth() {
+  const controls = document.getElementById("controls");
+  return controls ? controls.offsetWidth : 0;
+}
 
 const canvas = document.getElementById("fractalCanvas");
 const ctx = canvas.getContext("2d");
-canvas.width = window.innerWidth - 300;
-canvas.height =
-  window.innerHeight -
-  document.querySelector("header").offsetHeight -
-  document.querySelector("footer").offsetHeight;
 
 function getPaletteColor(palette, t) {
   switch (palette) {
@@ -55,16 +56,58 @@ function getPaletteColor(palette, t) {
 }
 
 function renderFractal() {
+  const loadingIndicator = document.getElementById("loadingIndicator");
+
+  // Show loading indicator
+  if (loadingIndicator) {
+    loadingIndicator.classList.add("active");
+  }
+
+  // Use setTimeout to allow the UI to update before blocking
+  setTimeout(() => {
+    try {
+      renderFractalCore();
+    } finally {
+      // Hide loading indicator
+      if (loadingIndicator) {
+        loadingIndicator.classList.remove("active");
+      }
+    }
+  }, 10);
+}
+
+function renderFractalCore() {
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.width;
   const height = canvas.height;
 
   const type = document.getElementById("type").value;
-  const cRe = parseFloat(document.getElementById("cReal").value);
-  const cIm = parseFloat(document.getElementById("cImag").value);
-  const maxIter = parseInt(document.getElementById("iterations").value);
+  let cRe = parseFloat(document.getElementById("cReal").value);
+  let cIm = parseFloat(document.getElementById("cImag").value);
+  let maxIter = parseInt(document.getElementById("iterations").value);
   const coloring = document.getElementById("coloring").value;
   const palette = document.getElementById("palette").value;
+
+  // Input validation
+  if (isNaN(cRe) || !isFinite(cRe)) {
+    cRe = -0.7;
+    document.getElementById("cReal").value = cRe;
+  }
+  if (isNaN(cIm) || !isFinite(cIm)) {
+    cIm = 0.27015;
+    document.getElementById("cImag").value = cIm;
+  }
+  if (isNaN(maxIter) || maxIter < 1) {
+    maxIter = 100;
+    document.getElementById("iterations").value = maxIter;
+  }
+  if (maxIter > 10000) {
+    maxIter = 10000;
+    document.getElementById("iterations").value = maxIter;
+  }
+  // Clamp Julia constants to reasonable range
+  cRe = Math.max(-2, Math.min(2, cRe));
+  cIm = Math.max(-2, Math.min(2, cIm));
 
   const aspectRatio = width / height;
   const scale = 1.5 / zoom;
@@ -157,9 +200,11 @@ function renderFractal() {
       cumsum += histogram[i];
       cumulativeHist[i] = cumsum;
     }
-    // Normalize cumulative histogram
-    for (let i = 0; i < cumulativeHist.length; i++) {
-      cumulativeHist[i] /= cumsum;
+    // Normalize cumulative histogram (avoid division by zero)
+    if (cumsum > 0) {
+      for (let i = 0; i < cumulativeHist.length; i++) {
+        cumulativeHist[i] /= cumsum;
+      }
     }
   }
 
@@ -273,11 +318,16 @@ function centerFractal() {
 
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
-  const cssWidth = window.innerWidth - 300;
+  const header = document.querySelector("header");
+  const footer = document.querySelector("footer");
+
+  // Calculate available space dynamically
+  const controlsWidth = getControlsWidth();
+  const cssWidth = window.innerWidth - controlsWidth;
   const cssHeight =
     window.innerHeight -
-    document.querySelector("header").offsetHeight -
-    document.querySelector("footer").offsetHeight;
+    (header ? header.offsetHeight : 0) -
+    (footer ? footer.offsetHeight : 0);
 
   canvas.style.width = cssWidth + "px";
   canvas.style.height = cssHeight + "px";
@@ -304,6 +354,12 @@ function animateZoom(
   endY,
   duration = 300
 ) {
+  // Cancel any existing animation
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+
   const startTime = performance.now();
 
   function animate(time) {
@@ -319,11 +375,13 @@ function animateZoom(
     renderFractal();
 
     if (t < 1) {
-      requestAnimationFrame(animate);
+      animationFrameId = requestAnimationFrame(animate);
+    } else {
+      animationFrameId = null;
     }
   }
 
-  requestAnimationFrame(animate);
+  animationFrameId = requestAnimationFrame(animate);
 }
 
 function resetView() {
@@ -351,6 +409,11 @@ function downloadImage() {
 }
 
 function zoomFractal(e) {
+  // Only handle left click (0) and right click (2)
+  if (e.button !== 0 && e.button !== 2) {
+    return;
+  }
+
   const isRightClick = e.button === 2;
   const zoomFactor = isRightClick ? 0.5 : 2;
 
@@ -390,20 +453,39 @@ function zoomFractal(e) {
   );
 }
 
-canvas.addEventListener("contextmenu", (e) => e.preventDefault()); // Disable context menu
-canvas.addEventListener("mousedown", (e) => zoomFractal(e));
+function initializeApp() {
+  if (!canvas || !ctx) {
+    console.error("Canvas element not found");
+    return;
+  }
 
-document
-  .getElementById("renderButton")
-  .addEventListener("click", () => renderFractal());
-document
-  .getElementById("resetView")
-  .addEventListener("click", () => resetView());
-document
-  .getElementById("downloadImage")
-  .addEventListener("click", () => downloadImage());
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault()); // Disable context menu
+  canvas.addEventListener("mousedown", (e) => zoomFractal(e));
 
-window.addEventListener("resize", resizeCanvas);
+  const renderButton = document.getElementById("renderButton");
+  const resetButton = document.getElementById("resetView");
+  const downloadButton = document.getElementById("downloadImage");
 
-centerFractal();
-resizeCanvas();
+  if (renderButton) {
+    renderButton.addEventListener("click", () => renderFractal());
+  }
+  if (resetButton) {
+    resetButton.addEventListener("click", () => resetView());
+  }
+  if (downloadButton) {
+    downloadButton.addEventListener("click", () => downloadImage());
+  }
+
+  window.addEventListener("resize", resizeCanvas);
+
+  centerFractal();
+  resizeCanvas();
+}
+
+// Initialize when DOM is ready
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initializeApp);
+} else {
+  // DOM already loaded
+  initializeApp();
+}
