@@ -3,6 +3,19 @@ let offsetY = 0;
 let zoom = 1; // initial zoom level
 let animationFrameId = null; // Track animation for cancellation
 
+// Web Worker support
+let fractalWorker = null;
+let workerSupported = typeof(Worker) !== "undefined";
+
+// Memory optimization: cache arrays to avoid reallocation
+let cachedArrays = {
+  iterationCounts: null,
+  histogram: null,
+  lastWidth: 0,
+  lastHeight: 0,
+  lastMaxIter: 0
+};
+
 function getControlsWidth() {
   const controls = document.getElementById("controls");
   return controls ? controls.offsetWidth : 0;
@@ -63,17 +76,112 @@ function renderFractal() {
     loadingIndicator.classList.add("active");
   }
 
-  // Use setTimeout to allow the UI to update before blocking
-  setTimeout(() => {
-    try {
-      renderFractalCore();
-    } finally {
-      // Hide loading indicator
+  // Use Web Worker if supported, otherwise fall back to main thread
+  if (workerSupported) {
+    renderFractalWorker(() => {
       if (loadingIndicator) {
         loadingIndicator.classList.remove("active");
       }
-    }
-  }, 10);
+    });
+  } else {
+    // Fallback to main thread rendering
+    setTimeout(() => {
+      try {
+        renderFractalCore();
+      } finally {
+        if (loadingIndicator) {
+          loadingIndicator.classList.remove("active");
+        }
+      }
+    }, 10);
+  }
+}
+
+function renderFractalWorker(callback) {
+  const width = canvas.width;
+  const height = canvas.height;
+
+  const type = document.getElementById("type").value;
+  let cRe = parseFloat(document.getElementById("cReal").value);
+  let cIm = parseFloat(document.getElementById("cImag").value);
+  let maxIter = parseInt(document.getElementById("iterations").value);
+  const coloring = document.getElementById("coloring").value;
+  const palette = document.getElementById("palette").value;
+
+  // Input validation
+  if (isNaN(cRe) || !isFinite(cRe)) {
+    cRe = -0.7;
+    document.getElementById("cReal").value = cRe;
+  }
+  if (isNaN(cIm) || !isFinite(cIm)) {
+    cIm = 0.27015;
+    document.getElementById("cImag").value = cIm;
+  }
+  if (isNaN(maxIter) || maxIter < 1) {
+    maxIter = 100;
+    document.getElementById("iterations").value = maxIter;
+  }
+  if (maxIter > 10000) {
+    maxIter = 10000;
+    document.getElementById("iterations").value = maxIter;
+  }
+  cRe = Math.max(-2, Math.min(2, cRe));
+  cIm = Math.max(-2, Math.min(2, cIm));
+
+  // Initialize worker if needed
+  if (!fractalWorker) {
+    fractalWorker = new Worker('fractal-worker.js');
+
+    fractalWorker.onmessage = function(e) {
+      if (e.data.type === 'progress') {
+        // Update loading indicator with progress
+        const loadingIndicator = document.getElementById("loadingIndicator");
+        if (loadingIndicator) {
+          const progressText = loadingIndicator.querySelector('div:last-child');
+          if (progressText) {
+            progressText.textContent = `Rendering... ${Math.floor(e.data.progress)}%`;
+          }
+        }
+      } else if (e.data.type === 'complete') {
+        const imageData = new ImageData(e.data.imageData, width, height);
+        ctx.putImageData(imageData, 0, 0);
+
+        // Reset progress text
+        const loadingIndicator = document.getElementById("loadingIndicator");
+        if (loadingIndicator) {
+          const progressText = loadingIndicator.querySelector('div:last-child');
+          if (progressText) {
+            progressText.textContent = 'Rendering...';
+          }
+        }
+
+        if (callback) callback();
+      }
+    };
+
+    fractalWorker.onerror = function(error) {
+      console.error('Worker error:', error);
+      workerSupported = false;
+      if (callback) callback();
+      // Retry with fallback
+      renderFractal();
+    };
+  }
+
+  // Send data to worker
+  fractalWorker.postMessage({
+    width,
+    height,
+    type,
+    cRe,
+    cIm,
+    maxIter,
+    coloring,
+    palette,
+    offsetX,
+    offsetY,
+    zoom
+  });
 }
 
 function renderFractalCore() {
@@ -114,10 +222,34 @@ function renderFractalCore() {
 
   const imageData = ctx.createImageData(width, height);
 
-  // For histogram coloring, we need two passes:
-  // First pass: calculate iteration counts for all pixels and build histogram
-  let iterationCounts = new Uint32Array(width * height);
-  let histogram = new Uint32Array(maxIter + 1);
+  // Memory optimization: reuse arrays if dimensions haven't changed
+  let iterationCounts;
+  let histogram;
+
+  const pixelCount = width * height;
+  const needNewArrays =
+    cachedArrays.lastWidth !== width ||
+    cachedArrays.lastHeight !== height ||
+    cachedArrays.lastMaxIter !== maxIter;
+
+  if (needNewArrays || !cachedArrays.iterationCounts) {
+    iterationCounts = new Float32Array(pixelCount);
+    histogram = new Uint32Array(maxIter + 1);
+
+    // Cache for reuse
+    cachedArrays.iterationCounts = iterationCounts;
+    cachedArrays.histogram = histogram;
+    cachedArrays.lastWidth = width;
+    cachedArrays.lastHeight = height;
+    cachedArrays.lastMaxIter = maxIter;
+  } else {
+    // Reuse cached arrays
+    iterationCounts = cachedArrays.iterationCounts;
+    histogram = cachedArrays.histogram;
+
+    // Clear histogram (iterationCounts will be overwritten)
+    histogram.fill(0);
+  }
 
   // For orbit trap (example: point trap at origin)
   function orbitTrap(zx, zy) {
@@ -453,11 +585,33 @@ function zoomFractal(e) {
   );
 }
 
+// Cleanup function for worker
+function cleanupWorker() {
+  if (fractalWorker) {
+    fractalWorker.terminate();
+    fractalWorker = null;
+  }
+}
+
+// Clear cached arrays to free memory
+function clearMemoryCache() {
+  cachedArrays = {
+    iterationCounts: null,
+    histogram: null,
+    lastWidth: 0,
+    lastHeight: 0,
+    lastMaxIter: 0
+  };
+}
+
 function initializeApp() {
   if (!canvas || !ctx) {
     console.error("Canvas element not found");
     return;
   }
+
+  // Log worker support status
+  console.log('Web Worker support:', workerSupported ? 'Enabled' : 'Disabled (fallback to main thread)');
 
   canvas.addEventListener("contextmenu", (e) => e.preventDefault()); // Disable context menu
   canvas.addEventListener("mousedown", (e) => zoomFractal(e));
@@ -477,6 +631,12 @@ function initializeApp() {
   }
 
   window.addEventListener("resize", resizeCanvas);
+
+  // Cleanup on page unload
+  window.addEventListener("beforeunload", () => {
+    cleanupWorker();
+    clearMemoryCache();
+  });
 
   centerFractal();
   resizeCanvas();
