@@ -604,11 +604,47 @@ function clearMemoryCache() {
   };
 }
 
+// Dark mode toggle
+function initializeDarkMode() {
+  const themeToggle = document.getElementById('themeToggle');
+  const themeIcon = themeToggle?.querySelector('.theme-icon');
+  const themeText = themeToggle?.querySelector('.theme-text');
+
+  // Check for saved preference or default to light mode
+  const savedTheme = localStorage.getItem('theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+
+  if (initialTheme === 'dark') {
+    document.body.classList.add('dark-mode');
+    if (themeIcon) themeIcon.textContent = '☀️';
+    if (themeText) themeText.textContent = 'Light Mode';
+  }
+
+  // Toggle dark mode
+  if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
+      const isDark = document.body.classList.contains('dark-mode');
+
+      // Update button
+      if (themeIcon) themeIcon.textContent = isDark ? '☀️' : '🌙';
+      if (themeText) themeText.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+
+      // Save preference
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    });
+  }
+}
+
 function initializeApp() {
   if (!canvas || !ctx) {
     console.error("Canvas element not found");
     return;
   }
+
+  // Initialize dark mode
+  initializeDarkMode();
 
   // Log worker support status
   console.log('Web Worker support:', workerSupported ? 'Enabled' : 'Disabled (fallback to main thread)');
