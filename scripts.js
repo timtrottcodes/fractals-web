@@ -143,7 +143,21 @@ function renderFractalWorker(callback) {
           }
         }
       } else if (e.data.type === 'complete') {
-        const imageData = new ImageData(e.data.imageData, width, height);
+        // Create ImageData from the transferred data
+        const receivedData = e.data.imageData;
+        const messageWidth = e.data.width || canvas.width;
+        const messageHeight = e.data.height || canvas.height;
+        let imageData;
+
+        // Check if it's already the right size for ImageData
+        if (receivedData.length === messageWidth * messageHeight * 4) {
+          imageData = new ImageData(new Uint8ClampedArray(receivedData), messageWidth, messageHeight);
+        } else {
+          console.error('Received imageData with incorrect size:', receivedData.length, 'expected:', messageWidth * messageHeight * 4);
+          if (callback) callback();
+          return;
+        }
+
         ctx.putImageData(imageData, 0, 0);
 
         // Reset progress text
@@ -168,6 +182,15 @@ function renderFractalWorker(callback) {
     };
   }
 
+  // Gather fractal-specific parameters
+  const newtonPower = parseInt(document.getElementById("newtonPower")?.value) || 3;
+  const newtonRelax = parseFloat(document.getElementById("newtonRelax")?.value) || 1.0;
+  const sierpinskiPoints = parseInt(document.getElementById("sierpinskiPoints")?.value) || 50000;
+  const treeAngle = parseFloat(document.getElementById("treeAngle")?.value) || 25;
+  const treeLengthRatio = parseFloat(document.getElementById("treeLengthRatio")?.value) || 0.67;
+  const treeDepth = parseInt(document.getElementById("treeDepth")?.value) || 10;
+  const treeColor = document.getElementById("treeColor")?.value || 'natural';
+
   // Send data to worker
   fractalWorker.postMessage({
     width,
@@ -180,7 +203,14 @@ function renderFractalWorker(callback) {
     palette,
     offsetX,
     offsetY,
-    zoom
+    zoom,
+    newtonPower,
+    newtonRelax,
+    sierpinskiPoints,
+    treeAngle,
+    treeLengthRatio,
+    treeDepth,
+    treeColor
   });
 }
 
@@ -546,6 +576,12 @@ function zoomFractal(e) {
     return;
   }
 
+  // Disable zoom for certain fractal types
+  const fractalType = document.getElementById('type')?.value;
+  if (fractalType === 'tree' || fractalType === 'sierpinski') {
+    return;  // These fractals don't support zooming
+  }
+
   const isRightClick = e.button === 2;
   const zoomFactor = isRightClick ? 0.5 : 2;
 
@@ -604,6 +640,40 @@ function clearMemoryCache() {
   };
 }
 
+// Fractal type descriptions
+const fractalDescriptions = {
+  mandelbrot: "The famous Mandelbrot set showing infinite complexity at every scale.",
+  julia: "Julia sets create beautiful symmetric patterns based on complex constants.",
+  burningship: "A variation of Mandelbrot with absolute values, creating ship-like shapes.",
+  newton: "Newton's method visualized - colors show which root each point converges to.",
+  sierpinski: "Classic fractal triangle created using the chaos game algorithm.",
+  tree: "Recursive branching structure resembling natural trees and plants."
+};
+
+// Handle fractal type changes
+function updateFractalControls() {
+  const fractalType = document.getElementById('type')?.value || 'mandelbrot';
+  const description = document.getElementById('fractalDesc');
+
+  // Update description
+  if (description) {
+    description.textContent = fractalDescriptions[fractalType] || '';
+  }
+
+  // Hide all fractal-specific controls
+  document.querySelectorAll('.fractal-specific').forEach(control => {
+    control.classList.remove('active');
+  });
+
+  // Show relevant controls for this fractal type
+  document.querySelectorAll(`.fractal-specific[data-fractal*="${fractalType}"]`).forEach(control => {
+    control.classList.add('active');
+  });
+
+  // Auto-render on type change
+  renderFractal();
+}
+
 // Dark mode toggle
 function initializeDarkMode() {
   const themeToggle = document.getElementById('themeToggle');
@@ -646,6 +716,9 @@ function initializeApp() {
   // Initialize dark mode
   initializeDarkMode();
 
+  // Initialize fractal controls
+  updateFractalControls();
+
   // Log worker support status
   console.log('Web Worker support:', workerSupported ? 'Enabled' : 'Disabled (fallback to main thread)');
 
@@ -655,6 +728,7 @@ function initializeApp() {
   const renderButton = document.getElementById("renderButton");
   const resetButton = document.getElementById("resetView");
   const downloadButton = document.getElementById("downloadImage");
+  const typeSelect = document.getElementById("type");
 
   if (renderButton) {
     renderButton.addEventListener("click", () => renderFractal());
@@ -664,6 +738,9 @@ function initializeApp() {
   }
   if (downloadButton) {
     downloadButton.addEventListener("click", () => downloadImage());
+  }
+  if (typeSelect) {
+    typeSelect.addEventListener("change", () => updateFractalControls());
   }
 
   window.addEventListener("resize", resizeCanvas);
