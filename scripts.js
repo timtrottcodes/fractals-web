@@ -547,9 +547,27 @@ function animateZoom(
 }
 
 function resetView() {
-  offsetX = 0;
-  offsetY = 0;
-  zoom = 1;
+  // Stop any running animation
+  if (animationState.isPlaying) {
+    stopAnimation();
+  }
+
+  // Stop any running export
+  if (exportState.isExporting) {
+    cancelExport();
+  }
+
+  // Reset animation state to defaults
+  animationState.loop = true;
+  animationState.duration = 30;
+  animationState.exportMode = false;
+  const animationTypeSelect = document.getElementById('animationType');
+  if (animationTypeSelect) {
+    animationTypeSelect.value = 'none';
+  }
+  updateAnimationControls();
+
+  // Use centerFractal to set proper default offsets (handles aspect ratio)
   centerFractal();
   renderFractal();
 }
@@ -571,6 +589,11 @@ function downloadImage() {
 }
 
 function zoomFractal(e) {
+  // Stop any running animation when user manually interacts
+  if (animationState.isPlaying) {
+    stopAnimation();
+  }
+
   // Only handle left click (0) and right click (2)
   if (e.button !== 0 && e.button !== 2) {
     return;
@@ -640,6 +663,709 @@ function clearMemoryCache() {
   };
 }
 
+// Animation system
+let animationState = {
+  isPlaying: false,
+  type: 'none',
+  startTime: 0,
+  speed: 1.0,
+  frameCount: 0,
+  requestId: null,
+  duration: 30,
+  loop: true
+};
+
+// Animation functions
+function startAnimation() {
+  const animationType = document.getElementById('animationType')?.value;
+  if (animationType === 'none' || !animationType) return;
+
+  animationState.isPlaying = true;
+  animationState.type = animationType;
+  animationState.startTime = performance.now();
+  animationState.frameCount = 0;
+  animationState.speed = parseFloat(document.getElementById('animationSpeed')?.value) || 1.0;
+
+  // Only read UI values if NOT in export mode (export sets these programmatically)
+  if (!animationState.exportMode) {
+    animationState.duration = parseFloat(document.getElementById('animationDuration')?.value) || 30;
+    animationState.loop = document.getElementById('animationLoop')?.checked || false;
+  }
+
+  // Update UI
+  const playButton = document.getElementById('playAnimation');
+  const stopButton = document.getElementById('stopAnimation');
+  const progressContainer = document.querySelector('.animation-progress');
+  if (playButton) playButton.style.display = 'none';
+  if (stopButton) stopButton.style.display = 'block';
+  if (progressContainer) progressContainer.classList.add('active');
+
+  // Update total duration display
+  const totalDisplay = document.getElementById('animationTotal');
+  if (totalDisplay) totalDisplay.textContent = animationState.duration.toFixed(1);
+
+  // Start animation loop
+  window.animateFrame();
+}
+
+function stopAnimation() {
+  animationState.isPlaying = false;
+  if (animationState.requestId) {
+    cancelAnimationFrame(animationState.requestId);
+    animationState.requestId = null;
+  }
+
+  // Update UI
+  const playButton = document.getElementById('playAnimation');
+  const stopButton = document.getElementById('stopAnimation');
+  const progressContainer = document.querySelector('.animation-progress');
+  if (playButton) playButton.style.display = 'block';
+  if (stopButton) stopButton.style.display = 'none';
+  if (progressContainer) progressContainer.classList.remove('active');
+}
+
+window.animateFrame = function animateFrame() {
+  if (!animationState.isPlaying) return;
+
+  const elapsed = (performance.now() - animationState.startTime) * animationState.speed / 1000; // seconds
+  animationState.frameCount++;
+
+  // Update progress UI
+  updateAnimationProgress(elapsed);
+
+  // Check if animation should end
+  if (elapsed >= animationState.duration) {
+    if (animationState.loop) {
+      // Restart animation
+      animationState.startTime = performance.now();
+      animationState.frameCount = 0;
+    } else {
+      // Stop animation
+      stopAnimation();
+      return;
+    }
+  }
+
+  // Apply animation based on type
+  const effectiveTime = animationState.loop ? (elapsed % animationState.duration) : elapsed;
+
+  switch (animationState.type) {
+    case 'julia':
+      animateJulia(effectiveTime);
+      break;
+    case 'zoom':
+      animateZoom(effectiveTime);
+      break;
+    case 'colorCycle':
+      animateColorCycle(effectiveTime);
+      break;
+    case 'paramSweep':
+      animateParameterSweep(effectiveTime);
+      break;
+  }
+
+  // Continue animation
+  animationState.requestId = requestAnimationFrame(window.animateFrame);
+};
+
+// Update animation progress display
+function updateAnimationProgress(elapsed) {
+  const progressBar = document.getElementById('animationProgressBar');
+  const timeDisplay = document.getElementById('animationTime');
+  const framesDisplay = document.getElementById('animationFrames');
+
+  if (progressBar) {
+    const progress = Math.min(100, (elapsed / animationState.duration) * 100);
+    progressBar.style.width = progress + '%';
+  }
+
+  if (timeDisplay) {
+    timeDisplay.textContent = elapsed.toFixed(1);
+  }
+
+  if (framesDisplay) {
+    framesDisplay.textContent = animationState.frameCount;
+  }
+}
+
+// Julia set morphing animation
+function animateJulia(time) {
+  if (!animationState.isPlaying) return;
+
+  const pathType = document.getElementById('juliaPath')?.value || 'circle';
+  let cReal, cImag;
+
+  switch (pathType) {
+    case 'circle':
+      // Circle around origin
+      const radius = 0.7;
+      cReal = radius * Math.cos(time);
+      cImag = radius * Math.sin(time);
+      break;
+
+    case 'spiral':
+      // Spiral outward
+      const spiralRadius = 0.3 + (time % 10) * 0.05;
+      cReal = spiralRadius * Math.cos(time * 2);
+      cImag = spiralRadius * Math.sin(time * 2);
+      break;
+
+    case 'lemniscate':
+      // Figure-8 pattern
+      const t = time * 0.5;
+      const scale = 0.6;
+      cReal = scale * Math.sin(t) / (1 + Math.cos(t) * Math.cos(t));
+      cImag = scale * Math.sin(t) * Math.cos(t) / (1 + Math.cos(t) * Math.cos(t));
+      break;
+
+    case 'random':
+      // Smooth random walk using Perlin-like interpolation
+      const freq = 0.3;
+      cReal = 0.7 * Math.sin(time * freq) * Math.cos(time * freq * 1.3);
+      cImag = 0.7 * Math.cos(time * freq * 0.7) * Math.sin(time * freq * 1.7);
+      break;
+  }
+
+  // Update inputs
+  const cRealInput = document.getElementById('cReal');
+  const cImagInput = document.getElementById('cImag');
+  if (cRealInput) cRealInput.value = cReal.toFixed(4);
+  if (cImagInput) cImagInput.value = cImag.toFixed(4);
+
+  // Render
+  renderFractal();
+}
+
+// Auto zoom animation
+function animateZoom(time) {
+  const targetType = document.getElementById('zoomTarget')?.value || 'center';
+
+  // Exponential zoom in
+  const zoomSpeed = 0.3;
+  const newZoom = Math.exp(time * zoomSpeed);
+  zoom = newZoom;
+
+  // Interesting points for Mandelbrot
+  const interestingPoints = {
+    mandelbrot: { x: -0.7, y: 0.0 },
+    julia: { x: 0.0, y: 0.0 }
+  };
+
+  const fractalType = document.getElementById('type')?.value || 'mandelbrot';
+
+  if (targetType === 'interesting' && interestingPoints[fractalType]) {
+    offsetX = interestingPoints[fractalType].x;
+    offsetY = interestingPoints[fractalType].y;
+  } else if (targetType === 'spiral') {
+    const spiralSpeed = 0.1;
+    const spiralRadius = 0.5 / Math.sqrt(newZoom);
+    offsetX = spiralRadius * Math.cos(time * spiralSpeed);
+    offsetY = spiralRadius * Math.sin(time * spiralSpeed);
+  }
+
+  renderFractal();
+}
+
+// Color cycling animation
+let colorCycleOffset = 0;
+function animateColorCycle(time) {
+  colorCycleOffset = time * 50; // Cycle speed
+  renderFractalWithColorOffset(colorCycleOffset);
+}
+
+// Parameter sweep animation
+function animateParameterSweep(time) {
+  const param = document.getElementById('sweepParam')?.value;
+  if (!param) return;
+
+  const cycle = Math.sin(time * 0.5) * 0.5 + 0.5; // 0 to 1 oscillating
+
+  switch (param) {
+    case 'iterations':
+      const minIter = 50;
+      const maxIter = 500;
+      const iterations = Math.floor(minIter + cycle * (maxIter - minIter));
+      const iterInput = document.getElementById('iterations');
+      if (iterInput) iterInput.value = iterations;
+      break;
+
+    case 'newtonPower':
+      const power = Math.floor(2 + cycle * 6); // 2 to 8
+      const powerInput = document.getElementById('newtonPower');
+      if (powerInput) powerInput.value = power;
+      break;
+
+    case 'treeAngle':
+      const angle = 10 + cycle * 70; // 10 to 80 degrees
+      const angleInput = document.getElementById('treeAngle');
+      if (angleInput) angleInput.value = Math.floor(angle);
+      break;
+
+    case 'treeLengthRatio':
+      const ratio = 0.5 + cycle * 0.35; // 0.5 to 0.85
+      const ratioInput = document.getElementById('treeLengthRatio');
+      if (ratioInput) ratioInput.value = ratio.toFixed(2);
+      break;
+  }
+
+  renderFractal();
+}
+
+// Render with color offset for cycling effect
+function renderFractalWithColorOffset(offset) {
+  // This is a simplified version - we'd need to pass offset to worker
+  // For now, just trigger a regular render
+  renderFractal();
+}
+
+// ============================================
+// EXPORT SYSTEM
+// ============================================
+
+let exportState = {
+  isExporting: false,
+  format: 'webm',
+  mediaRecorder: null,
+  recordedChunks: [],
+  frameCount: 0,
+  frameStep: 1,
+  capturedFrames: [],
+  stream: null,
+  originalAnimateFrame: null,
+  exportStartTime: 0
+};
+
+// Start export
+function startExport() {
+  // Validate animation type is selected
+  const animationType = document.getElementById('animationType')?.value;
+  if (!animationType || animationType === 'none') {
+    alert('⚠️ Please select an Animation Type before exporting.\n\nChoose from:\n• Julia Set Morph\n• Auto Zoom\n• Color Cycle\n• Parameter Sweep');
+    return;
+  }
+
+  const format = document.getElementById('exportFormat')?.value || 'webm';
+  exportState.format = format;
+  exportState.frameCount = 0;
+  exportState.isExporting = true;
+
+  // Show export progress
+  const exportProgress = document.querySelector('.export-progress');
+  const startButton = document.getElementById('startExport');
+  const cancelButton = document.getElementById('cancelExport');
+  if (exportProgress) exportProgress.style.display = 'block';
+  if (startButton) startButton.style.display = 'none';
+  if (cancelButton) cancelButton.style.display = 'block';
+
+  if (format === 'webm') {
+    startWebMExport();
+  } else if (format === 'png-sequence') {
+    startPNGSequenceExport();
+  }
+}
+
+// Cancel export
+function cancelExport() {
+  exportState.isExporting = false;
+
+  // Stop media recorder if active
+  if (exportState.mediaRecorder && exportState.mediaRecorder.state !== 'inactive') {
+    exportState.mediaRecorder.stop();
+  }
+
+  // Stop stream
+  if (exportState.stream) {
+    exportState.stream.getTracks().forEach(track => track.stop());
+    exportState.stream = null;
+  }
+
+  // Clear captured frames
+  exportState.capturedFrames = [];
+  exportState.frameCount = 0;
+
+  // Restore original animateFrame function if it was hooked
+  if (exportState.originalAnimateFrame) {
+    window.animateFrame = exportState.originalAnimateFrame;
+    exportState.originalAnimateFrame = null;
+  }
+
+  // Reset UI
+  const exportProgress = document.querySelector('.export-progress');
+  const startButton = document.getElementById('startExport');
+  const cancelButton = document.getElementById('cancelExport');
+  const statusDisplay = document.getElementById('exportStatus');
+  const progressBar = document.getElementById('exportProgressBar');
+
+  if (exportProgress) exportProgress.style.display = 'none';
+  if (startButton) startButton.style.display = 'block';
+  if (cancelButton) cancelButton.style.display = 'none';
+  if (statusDisplay) statusDisplay.textContent = 'Cancelled';
+  if (progressBar) progressBar.style.width = '0%';
+
+  // Stop animation if it's running
+  if (animationState.isPlaying) {
+    stopAnimation();
+  }
+
+  // Clear export mode flag
+  animationState.exportMode = false;
+}
+
+// WebM video export using MediaRecorder API
+function startWebMExport() {
+  try {
+    const statusDisplay = document.getElementById('exportStatus');
+    if (statusDisplay) statusDisplay.textContent = 'Initializing recorder...';
+
+    // Get export duration (this is the VIDEO duration, not recording duration)
+    const exportDuration = parseFloat(document.getElementById('animationDuration')?.value) || 30;
+
+    // Get canvas stream
+    const fps = parseInt(document.getElementById('exportFPS')?.value) || 30;
+    exportState.stream = canvas.captureStream(fps);
+
+    // Get quality settings
+    const quality = document.getElementById('exportQuality')?.value || 'medium';
+    const bitrates = { high: 2500000, medium: 1500000, low: 800000 };
+    const bitrate = bitrates[quality];
+
+    // Create media recorder
+    const options = {
+      mimeType: 'video/webm;codecs=vp9',
+      videoBitsPerSecond: bitrate
+    };
+
+    // Fallback to vp8 if vp9 not supported
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options.mimeType = 'video/webm;codecs=vp8';
+    }
+
+    exportState.mediaRecorder = new MediaRecorder(exportState.stream, options);
+    exportState.recordedChunks = [];
+
+    exportState.mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        exportState.recordedChunks.push(event.data);
+      }
+    };
+
+    exportState.mediaRecorder.onstop = () => {
+      if (exportState.recordedChunks.length > 0) {
+        const blob = new Blob(exportState.recordedChunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `fractal-animation-${Date.now()}.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        if (statusDisplay) statusDisplay.textContent = 'Export complete!';
+      }
+
+      // Cleanup
+      if (exportState.stream) {
+        exportState.stream.getTracks().forEach(track => track.stop());
+        exportState.stream = null;
+      }
+
+      // Reset UI after a delay
+      setTimeout(() => {
+        const exportProgress = document.querySelector('.export-progress');
+        const startButton = document.getElementById('startExport');
+        const cancelButton = document.getElementById('cancelExport');
+
+        if (exportProgress) exportProgress.style.display = 'none';
+        if (startButton) startButton.style.display = 'block';
+        if (cancelButton) cancelButton.style.display = 'none';
+      }, 2000);
+
+      exportState.isExporting = false;
+    };
+
+    // FORCE animation to run for exact duration
+    // Save original animation state
+    const originalLoop = animationState.loop;
+    const originalDuration = animationState.duration;
+    const originalType = animationState.type;
+
+    // Get animation type (already validated in startExport)
+    const animationType = document.getElementById('animationType')?.value;
+
+    // Save and set fractal type based on animation
+    const fractalTypeSelect = document.getElementById('type');
+    const originalFractalType = fractalTypeSelect?.value;
+
+    // Set appropriate fractal type for the animation
+    if (animationType === 'julia' && fractalTypeSelect) {
+      fractalTypeSelect.value = 'julia';
+    }
+
+    // Override for export - set exportMode first so startAnimation sees it
+    animationState.exportMode = true;
+    animationState.loop = false;
+    animationState.duration = exportDuration;
+    animationState.type = animationType;
+
+    // Stop any existing animation
+    if (animationState.isPlaying) {
+      stopAnimation();
+    }
+
+    // Start fresh animation before recorder
+    startAnimation();
+
+    // Set start time immediately (before setTimeout)
+    exportState.exportStartTime = performance.now();
+
+    // Wait for first frame to render, then start recording
+    setTimeout(() => {
+      exportState.mediaRecorder.start();
+      if (statusDisplay) statusDisplay.textContent = 'Recording...';
+    }, 300);
+
+    // Monitor export progress and auto-stop
+    const monitorInterval = setInterval(() => {
+      if (!exportState.isExporting) {
+        clearInterval(monitorInterval);
+        // Restore original settings
+        animationState.loop = originalLoop;
+        animationState.duration = originalDuration;
+        animationState.type = originalType;
+        animationState.exportMode = false;
+        if (fractalTypeSelect && originalFractalType) {
+          fractalTypeSelect.value = originalFractalType;
+        }
+        return;
+      }
+
+      const exportElapsed = (performance.now() - exportState.exportStartTime) / 1000;
+      const frameDisplay = document.getElementById('exportFrameCount');
+      const progressBar = document.getElementById('exportProgressBar');
+
+      // Update frame count
+      if (frameDisplay) {
+        frameDisplay.textContent = Math.floor(exportElapsed * fps);
+      }
+
+      // Update progress based on EXPORT duration
+      if (progressBar) {
+        const progress = Math.min(100, (exportElapsed / exportDuration) * 100);
+        progressBar.style.width = progress + '%';
+      }
+
+      // Auto-stop when export duration reached
+      if (exportElapsed >= exportDuration) {
+        // Mark export as complete
+        exportState.isExporting = false;
+
+        // Stop recorder
+        if (exportState.mediaRecorder && exportState.mediaRecorder.state === 'recording') {
+          exportState.mediaRecorder.stop();
+        }
+
+        // Stop animation immediately (before restoring loop setting)
+        if (animationState.isPlaying) {
+          stopAnimation();
+        }
+
+        // Restore original settings after animation is stopped
+        animationState.loop = originalLoop;
+        animationState.duration = originalDuration;
+        animationState.type = originalType;
+        animationState.exportMode = false;
+        if (fractalTypeSelect && originalFractalType) {
+          fractalTypeSelect.value = originalFractalType;
+        }
+
+        clearInterval(monitorInterval);
+      }
+    }, 100);
+
+  } catch (error) {
+    console.error('WebM export error:', error);
+    const statusDisplay = document.getElementById('exportStatus');
+    if (statusDisplay) statusDisplay.textContent = 'Error: ' + error.message;
+    cancelExport();
+  }
+}
+
+// PNG sequence export
+function startPNGSequenceExport() {
+  const statusDisplay = document.getElementById('exportStatus');
+  const frameStepInput = document.getElementById('exportFrameStep');
+  exportState.frameStep = parseInt(frameStepInput?.value) || 2;
+  exportState.capturedFrames = [];
+  exportState.frameCount = 0;
+
+  // Get export duration
+  const exportDuration = parseFloat(document.getElementById('animationDuration')?.value) || 30;
+  exportState.exportStartTime = performance.now();
+
+  if (statusDisplay) statusDisplay.textContent = 'Capturing frames...';
+
+  // Save original animation settings
+  const originalLoop = animationState.loop;
+  const originalDuration = animationState.duration;
+  const originalType = animationState.type;
+
+  // Get animation type (already validated in startExport)
+  const animationType = document.getElementById('animationType')?.value;
+
+  // Override for export
+  animationState.loop = false;
+  animationState.duration = exportDuration;
+  animationState.type = animationType;
+  animationState.exportMode = true;
+
+  // Hook into animation frame rendering
+  exportState.originalAnimateFrame = window.animateFrame;
+  let frameCounter = 0;
+
+  window.animateFrame = function() {
+    if (exportState.originalAnimateFrame) {
+      exportState.originalAnimateFrame.call(this);
+    }
+
+    if (!exportState.isExporting) {
+      if (exportState.originalAnimateFrame) {
+        window.animateFrame = exportState.originalAnimateFrame;
+        exportState.originalAnimateFrame = null;
+      }
+      // Restore original settings
+      animationState.loop = originalLoop;
+      animationState.duration = originalDuration;
+      animationState.type = originalType;
+      animationState.exportMode = false;
+      return;
+    }
+
+    // Capture frame at specified interval
+    if (frameCounter % exportState.frameStep === 0) {
+      const frameData = canvas.toDataURL('image/png');
+      exportState.capturedFrames.push(frameData);
+      exportState.frameCount++;
+
+      // Update UI
+      const frameDisplay = document.getElementById('exportFrameCount');
+      const progressBar = document.getElementById('exportProgressBar');
+
+      if (frameDisplay) {
+        frameDisplay.textContent = exportState.frameCount;
+      }
+
+      const exportElapsed = (performance.now() - exportState.exportStartTime) / 1000;
+      if (progressBar) {
+        const progress = Math.min(100, (exportElapsed / exportDuration) * 100);
+        progressBar.style.width = progress + '%';
+      }
+    }
+
+    frameCounter++;
+
+    // Check if duration reached
+    const exportElapsed = (performance.now() - exportState.exportStartTime) / 1000;
+    if (exportElapsed >= exportDuration) {
+      // Restore original function
+      window.animateFrame = exportState.originalAnimateFrame;
+      exportState.originalAnimateFrame = null;
+
+      // Stop animation
+      if (animationState.isPlaying) {
+        stopAnimation();
+      }
+
+      // Restore original settings
+      animationState.loop = originalLoop;
+      animationState.duration = originalDuration;
+      animationState.type = originalType;
+      animationState.exportMode = false;
+
+      // Download all frames
+      downloadPNGSequence();
+    }
+  };
+
+  // Stop any existing animation and start fresh
+  if (animationState.isPlaying) {
+    stopAnimation();
+  }
+  startAnimation();
+}
+
+// Download PNG sequence as individual files
+function downloadPNGSequence() {
+  const statusDisplay = document.getElementById('exportStatus');
+
+  if (exportState.capturedFrames.length === 0) {
+    if (statusDisplay) statusDisplay.textContent = 'No frames captured';
+    cancelExport();
+    return;
+  }
+
+  if (statusDisplay) statusDisplay.textContent = `Downloading ${exportState.capturedFrames.length} frames...`;
+
+  // Download frames with delay to avoid browser blocking
+  let downloadIndex = 0;
+  const timestamp = Date.now();
+
+  const downloadNext = () => {
+    if (downloadIndex >= exportState.capturedFrames.length) {
+      if (statusDisplay) statusDisplay.textContent = 'Export complete!';
+
+      // Show conversion instructions
+      showConversionInstructions();
+
+      // Reset UI
+      setTimeout(() => {
+        const exportProgress = document.querySelector('.export-progress');
+        const startButton = document.getElementById('startExport');
+        const cancelButton = document.getElementById('cancelExport');
+
+        if (exportProgress) exportProgress.style.display = 'none';
+        if (startButton) startButton.style.display = 'block';
+        if (cancelButton) cancelButton.style.display = 'none';
+      }, 5000);
+
+      exportState.isExporting = false;
+      return;
+    }
+
+    const frameData = exportState.capturedFrames[downloadIndex];
+    const a = document.createElement('a');
+    a.href = frameData;
+    a.download = `fractal-frame-${timestamp}-${String(downloadIndex).padStart(5, '0')}.png`;
+    a.click();
+
+    downloadIndex++;
+
+    // Update progress
+    const progressBar = document.getElementById('exportProgressBar');
+    if (progressBar) {
+      const progress = (downloadIndex / exportState.capturedFrames.length) * 100;
+      progressBar.style.width = progress + '%';
+    }
+
+    // Continue with next frame (small delay to avoid blocking)
+    setTimeout(downloadNext, 50);
+  };
+
+  downloadNext();
+}
+
+// Show instructions for converting PNG sequence to video
+function showConversionInstructions() {
+  const statusDisplay = document.getElementById('exportStatus');
+  if (statusDisplay) {
+    statusDisplay.innerHTML = `
+      <strong>Frames saved!</strong><br>
+      <small>To convert to AVI/MPG, use FFmpeg:<br>
+      <code style="font-size: 0.7rem; background: var(--bg-secondary); padding: 0.25rem; border-radius: 3px; display: block; margin-top: 0.25rem;">
+        ffmpeg -framerate 30 -pattern_type glob -i 'fractal-frame-*.png' -c:v mpeg4 output.avi
+      </code></small>
+    `;
+  }
+}
+
 // Fractal type descriptions
 const fractalDescriptions = {
   mandelbrot: "The famous Mandelbrot set showing infinite complexity at every scale.",
@@ -672,6 +1398,78 @@ function updateFractalControls() {
 
   // Auto-render on type change
   renderFractal();
+}
+
+// Handle animation type changes
+function updateAnimationControls() {
+  const animationType = document.getElementById('animationType')?.value || 'none';
+  const exportSection = document.querySelector('.export-section');
+  const playButton = document.getElementById('playAnimation');
+  const stopButton = document.getElementById('stopAnimation');
+
+  // Hide all animation-specific controls
+  document.querySelectorAll('.animation-control').forEach(control => {
+    control.classList.remove('active');
+  });
+
+  // Show/hide controls based on animation type
+  if (animationType !== 'none') {
+    // Show animation controls
+    document.querySelectorAll(`.animation-control[data-animation*="${animationType}"]`).forEach(control => {
+      control.classList.add('active');
+    });
+
+    // Show export section
+    if (exportSection) exportSection.style.display = 'block';
+
+    // Enable play button
+    if (playButton) playButton.disabled = false;
+  } else {
+    // Hide export section when no animation selected
+    if (exportSection) exportSection.style.display = 'none';
+
+    // Disable play button
+    if (playButton) playButton.disabled = true;
+
+    // Stop any running animation
+    if (animationState.isPlaying) {
+      stopAnimation();
+    }
+  }
+}
+
+// Update speed display
+function updateSpeedDisplay() {
+  const speed = document.getElementById('animationSpeed')?.value || 1.0;
+  const display = document.getElementById('speedValue');
+  if (display) {
+    display.textContent = parseFloat(speed).toFixed(1);
+  }
+}
+
+// Handle export format changes
+function updateExportControls() {
+  const format = document.getElementById('exportFormat')?.value || 'webm';
+
+  // Hide all export-specific options
+  document.querySelectorAll('.export-option').forEach(option => {
+    option.style.display = 'none';
+  });
+
+  // Show relevant options for this format
+  document.querySelectorAll(`.export-option[data-format="${format}"]`).forEach(option => {
+    option.style.display = 'block';
+  });
+
+  // Update description
+  document.querySelectorAll('.export-desc').forEach(desc => {
+    desc.style.display = 'none';
+  });
+
+  const activeDesc = document.querySelector(`.export-desc[data-format="${format}"]`);
+  if (activeDesc) {
+    activeDesc.style.display = 'block';
+  }
 }
 
 // Dark mode toggle
@@ -729,6 +1527,14 @@ function initializeApp() {
   const resetButton = document.getElementById("resetView");
   const downloadButton = document.getElementById("downloadImage");
   const typeSelect = document.getElementById("type");
+  const playButton = document.getElementById("playAnimation");
+  const stopButton = document.getElementById("stopAnimation");
+  const animationTypeSelect = document.getElementById("animationType");
+  const animationSpeedSlider = document.getElementById("animationSpeed");
+  const animationDurationInput = document.getElementById("animationDuration");
+  const exportFormatSelect = document.getElementById("exportFormat");
+  const startExportButton = document.getElementById("startExport");
+  const cancelExportButton = document.getElementById("cancelExport");
 
   if (renderButton) {
     renderButton.addEventListener("click", () => renderFractal());
@@ -742,6 +1548,41 @@ function initializeApp() {
   if (typeSelect) {
     typeSelect.addEventListener("change", () => updateFractalControls());
   }
+  if (playButton) {
+    playButton.addEventListener("click", () => startAnimation());
+  }
+  if (stopButton) {
+    stopButton.addEventListener("click", () => stopAnimation());
+  }
+  if (animationTypeSelect) {
+    animationTypeSelect.addEventListener("change", () => updateAnimationControls());
+  }
+  if (animationSpeedSlider) {
+    animationSpeedSlider.addEventListener("input", () => updateSpeedDisplay());
+  }
+  if (animationDurationInput) {
+    animationDurationInput.addEventListener("change", () => {
+      const totalDisplay = document.getElementById('animationTotal');
+      if (totalDisplay) {
+        totalDisplay.textContent = parseFloat(animationDurationInput.value).toFixed(1);
+      }
+    });
+  }
+  if (exportFormatSelect) {
+    exportFormatSelect.addEventListener("change", () => updateExportControls());
+  }
+  if (startExportButton) {
+    startExportButton.addEventListener("click", () => startExport());
+  }
+  if (cancelExportButton) {
+    cancelExportButton.addEventListener("click", () => cancelExport());
+  }
+
+  // Initialize animation controls
+  updateAnimationControls();
+
+  // Initialize export controls
+  updateExportControls();
 
   window.addEventListener("resize", resizeCanvas);
 

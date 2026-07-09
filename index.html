@@ -67,9 +67,11 @@
       background: var(--bg-primary);
       border-bottom: 1px solid var(--border-color);
       padding: 1.5rem 2rem;
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-rows: auto auto;
+      gap: 0.25rem 1rem;
       align-items: center;
-      justify-content: space-between;
       transition: background var(--transition-speed), border-color var(--transition-speed);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
@@ -81,13 +83,23 @@
       font-weight: 600;
       letter-spacing: -0.5px;
       color: var(--text-primary);
+      grid-column: 1;
+      grid-row: 1;
     }
 
     header p {
-      margin: 0.25rem 0 0 0;
+      margin: 0;
       font-size: 0.875rem;
       color: var(--text-secondary);
       font-weight: 400;
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .theme-toggle {
+      grid-column: 2;
+      grid-row: 1 / 3;
+      margin: 0;
     }
 
     .header-content {
@@ -181,9 +193,181 @@
       margin-bottom: 1rem;
     }
 
+    /* Animation controls */
+    .animation-control {
+      display: none;
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      margin-bottom: 0;
+    }
+
+    .animation-control.active {
+      display: block;
+      max-height: 500px;
+      opacity: 1;
+      margin-bottom: 1rem;
+    }
+
+    .animation-controls-buttons {
+      margin-top: 1rem;
+    }
+
+    .animation-button {
+      background: var(--success-green);
+      color: white;
+      margin-top: 0.5rem;
+    }
+
+    .animation-button:hover {
+      opacity: 0.85;
+    }
+
+    .animation-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+    }
+
+    .animation-button:disabled:hover {
+      opacity: 0.5;
+      transform: none;
+    }
+
+    /* Animation progress bar */
+    .progress-bar-container {
+      width: 100%;
+      height: 8px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-blue), var(--success-green));
+      width: 0%;
+      transition: width 0.3s ease;
+      border-radius: 4px;
+    }
+
+    .animation-progress.active {
+      display: block !important;
+    }
+
+    /* Checkbox styling */
+    input[type="checkbox"] {
+      width: auto;
+      margin-right: 0.5rem;
+      cursor: pointer;
+    }
+
+    label:has(input[type="checkbox"]) {
+      display: flex;
+      align-items: center;
+      font-weight: normal;
+      cursor: pointer;
+    }
+
+    /* Export controls */
+    .export-button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      margin-top: 1rem;
+      border: 2px solid rgba(102, 126, 234, 0.3);
+      font-weight: 600;
+      padding: 0.75rem 1.25rem;
+      border-radius: var(--border-radius-small);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+    }
+
+    .export-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+
+    .cancel-button {
+      background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+      border-color: rgba(108, 117, 125, 0.3);
+      box-shadow: 0 2px 8px rgba(108, 117, 125, 0.2);
+    }
+
+    .cancel-button:hover {
+      box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
+    }
+
+    .export-option {
+      display: block;
+    }
+
+    .export-option[style*="display: none"] {
+      display: none;
+    }
+
+    .export-desc {
+      display: none;
+    }
+
+    .export-desc[style*="display: block"] {
+      display: block;
+    }
+
+    .export-progress {
+      margin-top: 1rem;
+    }
+
     .fractal-desc {
       margin-top: 0.35rem;
       font-style: italic;
+    }
+
+    /* Range input styling */
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 3px;
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+      margin-top: 0.5rem;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      background: var(--accent-blue);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      background: var(--accent-blue);
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    input[type="range"]::-moz-range-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2);
     }
 
     /* ===== Labels ===== */
@@ -465,13 +649,10 @@
 </head>
 <body>
   <header>
-    <div class="header-content">
-      <h1>Fractal Explorer</h1>
-      <p>Interactive Mandelbrot and Julia Set Visualization</p>
-    </div>
+    <h1>Fractal Explorer</h1>
+    <p>Interactive Mandelbrot and Julia Set Visualization</p>
     <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
       <span class="theme-icon">🌙</span>
-      <span class="theme-text">Dark Mode</span>
     </button>
   </header>
 
@@ -594,6 +775,145 @@
       <div class="button-group">
         <button id="resetView">↻ Reset</button>
         <button id="downloadImage">⬇ Download</button>
+      </div>
+
+      <!-- Animation Controls -->
+      <div class="control-group" style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+        <label style="font-size: 0.9375rem; margin-bottom: 0.75rem;">🎬 Animation</label>
+
+        <div class="control-group">
+          <label for="animationType">Animation Type</label>
+          <select id="animationType">
+            <option value="none">None</option>
+            <option value="julia">Julia Set Morph</option>
+            <option value="zoom">Auto Zoom</option>
+            <option value="colorCycle">Color Cycle</option>
+            <option value="paramSweep">Parameter Sweep</option>
+          </select>
+        </div>
+
+        <div class="control-group animation-control" data-animation="julia zoom colorCycle paramSweep">
+          <label for="animationDuration">Duration (seconds)</label>
+          <input type="number" id="animationDuration" min="5" max="300" step="5" value="30"/>
+          <p class="description">Total animation length</p>
+        </div>
+
+        <div class="control-group animation-control" data-animation="julia zoom colorCycle paramSweep">
+          <label for="animationSpeed">Speed</label>
+          <input type="range" id="animationSpeed" min="0.1" max="5" step="0.1" value="1"/>
+          <p class="description"><span id="speedValue">1.0</span>x speed</p>
+        </div>
+
+        <div class="control-group animation-control" data-animation="julia zoom colorCycle paramSweep">
+          <label>
+            <input type="checkbox" id="animationLoop" checked/>
+            Loop continuously
+          </label>
+        </div>
+
+        <!-- Animation Progress -->
+        <div class="control-group animation-control animation-progress" data-animation="julia zoom colorCycle paramSweep" style="display: none;">
+          <label>Animation Progress</label>
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="animationProgressBar"></div>
+          </div>
+          <p class="description">
+            <span id="animationTime">0.0</span>s / <span id="animationTotal">30</span>s
+            (<span id="animationFrames">0</span> frames)
+          </p>
+        </div>
+
+        <div class="control-group animation-control" data-animation="julia">
+          <label for="juliaPath">Julia Path</label>
+          <select id="juliaPath">
+            <option value="circle">Circle</option>
+            <option value="spiral">Spiral</option>
+            <option value="lemniscate">Figure-8</option>
+            <option value="random">Random Walk</option>
+          </select>
+        </div>
+
+        <div class="control-group animation-control" data-animation="zoom">
+          <label for="zoomTarget">Zoom Target</label>
+          <select id="zoomTarget">
+            <option value="center">Center</option>
+            <option value="interesting">Interesting Point</option>
+            <option value="spiral">Spiral Path</option>
+          </select>
+        </div>
+
+        <div class="control-group animation-control" data-animation="paramSweep">
+          <label for="sweepParam">Parameter to Sweep</label>
+          <select id="sweepParam">
+            <option value="iterations">Max Iterations</option>
+            <option value="newtonPower" data-fractal="newton">Newton Power</option>
+            <option value="treeAngle" data-fractal="tree">Tree Angle</option>
+            <option value="treeLengthRatio" data-fractal="tree">Tree Length Ratio</option>
+          </select>
+        </div>
+
+        <div class="animation-controls-buttons">
+          <button id="playAnimation" class="animation-button">▶ Play</button>
+          <button id="stopAnimation" class="animation-button" style="display: none;">⏸ Pause</button>
+        </div>
+
+        <!-- Export Section -->
+        <div class="control-group export-section" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); display: none;">
+          <label style="font-size: 0.9375rem; margin-bottom: 0.75rem;">📹 Export Animation</label>
+
+          <div class="control-group">
+            <label for="exportFormat">Export Format</label>
+            <select id="exportFormat">
+              <option value="webm">WebM Video (Direct)</option>
+              <option value="png-sequence">PNG Sequence (Frames)</option>
+            </select>
+            <p class="description export-desc" data-format="webm">Records to .webm video file. Supported by most video players.</p>
+            <p class="description export-desc" data-format="png-sequence" style="display: none;">Downloads individual PNG frames. Convert to AVI/MPG using FFmpeg or video editor.</p>
+          </div>
+
+          <div class="control-group export-option" data-format="webm">
+            <label for="exportQuality">Video Quality</label>
+            <select id="exportQuality">
+              <option value="high">High (2.5 Mbps)</option>
+              <option value="medium" selected>Medium (1.5 Mbps)</option>
+              <option value="low">Low (0.8 Mbps)</option>
+            </select>
+          </div>
+
+          <div class="control-group export-option" data-format="webm">
+            <label for="exportFPS">Frame Rate</label>
+            <select id="exportFPS">
+              <option value="60">60 FPS</option>
+              <option value="30" selected>30 FPS</option>
+              <option value="24">24 FPS</option>
+            </select>
+          </div>
+
+          <div class="control-group export-option" data-format="png-sequence" style="display: none;">
+            <label for="exportFrameStep">Frame Skip</label>
+            <select id="exportFrameStep">
+              <option value="1">Every Frame</option>
+              <option value="2" selected>Every 2nd Frame</option>
+              <option value="3">Every 3rd Frame</option>
+            </select>
+            <p class="description">Reduce file count for faster export</p>
+          </div>
+
+          <button id="startExport" class="export-button">🎬 Start Export</button>
+          <button id="cancelExport" class="export-button cancel-button" style="display: none;">⏹ Cancel Export</button>
+
+          <!-- Export Progress -->
+          <div class="export-progress" style="display: none;">
+            <label>Export Progress</label>
+            <div class="progress-bar-container">
+              <div class="progress-bar" id="exportProgressBar"></div>
+            </div>
+            <p class="description">
+              <span id="exportStatus">Preparing...</span>
+              (<span id="exportFrameCount">0</span> frames)
+            </p>
+          </div>
+        </div>
       </div>
     </aside>
 
